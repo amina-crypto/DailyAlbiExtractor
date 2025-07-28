@@ -1,0 +1,11 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<configuration>
+	<appSettings>
+		<add key="SmtpServer" value="your.smtp.server" />
+		<add key="SmtpPort" value="587" />
+		<add key="SmtpUsername" value="your@email.com" />
+		<add key="SmtpPassword" value="yourpassword" />
+		<add key="FromEmail" value="sender@email.com" />
+		<add key="ToEmails" value="recipient1@email.com,recipient2@email.com" />
+	</appSettings>
+</configuration>
