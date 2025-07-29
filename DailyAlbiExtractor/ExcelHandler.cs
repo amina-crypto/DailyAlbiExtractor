@@ -95,5 +95,30 @@ namespace DailyAlbiExtractor
 
             return files?.Path;
         }
+
+        public void DownloadExcelFile(string sourceFilePath)
+        {
+            if (File.Exists(sourceFilePath))
+            {
+                // Get the Downloads folder path
+                string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
+                string fileName = Path.GetFileName(sourceFilePath);
+                string destinationPath = Path.Combine(downloadsPath, fileName);
+
+                // Ensure the destination directory exists
+                if (!Directory.Exists(downloadsPath))
+                {
+                    Directory.CreateDirectory(downloadsPath);
+                }
+
+                // Copy the file to the Downloads folder
+                File.Copy(sourceFilePath, destinationPath, true);
+                Console.WriteLine($"Excel file downloaded to: {destinationPath}");
+            }
+            else
+            {
+                throw new FileNotFoundException($"Source file not found: {sourceFilePath}");
+            }
+        }
     }
 }

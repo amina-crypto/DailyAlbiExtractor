@@ -7,7 +7,6 @@ using System.Net.Http;
 using System.Net.Mail;
 using System.Reflection;
 using System.Threading.Tasks;
-using System.Collections.Generic;
 using System.Configuration;
 
 namespace DailyAlbiExtractor
