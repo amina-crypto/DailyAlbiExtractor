@@ -84,17 +84,17 @@ namespace DailyAlbiExtractor
             return items;
         }
 
-        public string GetLatestPreviousFile()
-        {
-            var today = DateTime.Now.Date;
-            var files = Directory.GetFiles(DataFetcher.DataFolder, "FullData_*.xlsx")
-                .Select(f => new { Path = f, Date = DateTime.ParseExact(Path.GetFileName(f).Substring(9, 8), "yyyyMMdd", null) })
-                .Where(f => f.Date < today)
-                .OrderByDescending(f => f.Date)
-                .FirstOrDefault();
+        //public string GetLatestPreviousFile()
+        //{
+        //    var today = DateTime.Now.Date;
+        //    var files = Directory.GetFiles(DataFetcher.DataFolder, "FullData_*.xlsx")
+        //        .Select(f => new { Path = f, Date = DateTime.ParseExact(Path.GetFileName(f).Substring(9, 8), "yyyyMMdd", null) })
+        //        .Where(f => f.Date < today)
+        //        .OrderByDescending(f => f.Date)
+        //        .FirstOrDefault();
 
-            return files?.Path;
-        }
+        //    return files?.Path;
+        //}
 
         public void DownloadExcelFile(string sourceFilePath)
         {

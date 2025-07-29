@@ -21,13 +21,13 @@ namespace DailyAlbiExtractor
         public int Number { get; set; }
 
         [JsonProperty("pageable")]
-        public List<Pageable> Pageable { get; set; }
+        public Pageable Pageable { get; set; }
 
         [JsonProperty("size")]
         public int Size { get; set; }
 
         [JsonProperty("sort")]
-        public List<Sort> Sort { get; set; }
+        public Sort Sort { get; set; }
 
         [JsonProperty("totalElements")]
         public int TotalElements { get; set; }
