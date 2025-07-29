@@ -28,11 +28,21 @@ namespace DailyAlbiExtractor
                     for (int col = 0; col < properties.Length; col++)
                     {
                         var value = properties[col].GetValue(items[row], null);
-                        worksheet.Cell(row + 2, col + 1).Value = value != null ? value.ToString() : string.Empty;
+                        // Handle specific types to avoid formatting issues
+                        if (value is DateTime dateValue)
+                        {
+                            worksheet.Cell(row + 2, col + 1).Value = dateValue;
+                            worksheet.Cell(row + 2, col + 1).Style.DateFormat.Format = "yyyy-MM-dd";
+                        }
+                        else
+                        {
+                            worksheet.Cell(row + 2, col + 1).Value = value != null ? value.ToString() : string.Empty;
+                        }
                     }
                 }
 
                 workbook.SaveAs(filePath);
+                Console.WriteLine($"Excel file saved to: {filePath} with {items.Count} records");
             }
         }
 
@@ -72,7 +82,6 @@ namespace DailyAlbiExtractor
                                 }
                                 catch (Exception ex)
                                 {
-                                    // Log or handle conversion errors (e.g., skip or set default value)
                                     Console.WriteLine($"Conversion error for property {prop.Name}: {ex.Message}");
                                 }
                             }
@@ -84,34 +93,19 @@ namespace DailyAlbiExtractor
             return items;
         }
 
-        public string GetLatestPreviousFile()
-        {
-            var today = DateTime.Now.Date;
-            var files = Directory.GetFiles(DataFetcher.DataFolder, "FullData_*.xlsx")
-                .Select(f => new { Path = f, Date = DateTime.ParseExact(Path.GetFileName(f).Substring(9, 8), "yyyyMMdd", null) })
-                .Where(f => f.Date < today)
-                .OrderByDescending(f => f.Date)
-                .FirstOrDefault();
-
-            return files?.Path;
-        }
-
         public void DownloadExcelFile(string sourceFilePath)
         {
             if (File.Exists(sourceFilePath))
             {
-                // Get the Downloads folder path
                 string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
                 string fileName = Path.GetFileName(sourceFilePath);
                 string destinationPath = Path.Combine(downloadsPath, fileName);
 
-                // Ensure the destination directory exists
                 if (!Directory.Exists(downloadsPath))
                 {
                     Directory.CreateDirectory(downloadsPath);
                 }
 
-                // Copy the file to the Downloads folder
                 File.Copy(sourceFilePath, destinationPath, true);
                 Console.WriteLine($"Excel file downloaded to: {destinationPath}");
             }

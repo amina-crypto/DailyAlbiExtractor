@@ -15,17 +15,20 @@ namespace DailyAlbiExtractor
 
         private static async Task MainAsync()
         {
+            Console.WriteLine($"Starting execution at {DateTime.Now}");
             // Ensure data folder exists
             Directory.CreateDirectory(DataFetcher.DataFolder);
+            Console.WriteLine($"Data folder created/verified: {DataFetcher.DataFolder}");
 
             // Fetch current data
             var fetcher = new DataFetcher();
             var currentData = fetcher.FetchAllData();
+            Console.WriteLine($"Fetched {currentData.Count} items");
 
             // Generate filenames with today's date
             var today = DateTime.Now.ToString("yyyyMMdd");
-            var fullExcelPath = System.IO.Path.Combine(DataFetcher.DataFolder, $"FullData_{today}.xlsx");
-            // var changesExcelPath = System.IO.Path.Combine(DataFetcher.DataFolder, $"Changes_{today}.xlsx"); // Commented out
+            var fullExcelPath = Path.Combine(DataFetcher.DataFolder, $"FullData_{today}.xlsx");
+            // var changesExcelPath = Path.Combine(DataFetcher.DataFolder, $"Changes_{today}.xlsx"); // Commented out
 
             // Save full data to Excel
             var excelHandler = new ExcelHandler();
@@ -66,6 +69,8 @@ namespace DailyAlbiExtractor
             //     ConfigurationManager.AppSettings["ToEmails"].Split(',')
             // );
             // emailSender.SendEmail(changes.Any() ? new[] { fullExcelPath, changesExcelPath } : new[] { fullExcelPath });
+
+            Console.WriteLine($"Execution completed at {DateTime.Now}");
         }
     }
 }

@@ -13,7 +13,7 @@ namespace DailyAlbiExtractor
         private const int SectionId = 1;
         private const string OrderBy = "id";
         private const bool Ascendente = true;
-        private const int PageSize = 50; // Matches the API's pageSize from the response
+        private const int Limit = 1000; // Set to 1000 as per your URL, which should cover all 218 records
 
         /// <summary>
         /// Fetches all data from the API, handling pagination by incrementing the offset.
@@ -32,38 +32,48 @@ namespace DailyAlbiExtractor
                 {
                     try
                     {
-                        string url = $"{ApiBaseUrl}?idSezione={SectionId}&orderBy={OrderBy}&ascendente={Ascendente}&offset={offset}&size={PageSize}";
+                        string url = $"{ApiBaseUrl}?idSezione={SectionId}&orderBy={OrderBy}&ascendente={Ascendente}&offset={offset}&limit={Limit}";
+                        Console.WriteLine($"Fetching data from: {url}");
                         string jsonString = client.DownloadString(url);
+                        Console.WriteLine($"Received JSON length: {jsonString.Length}");
                         var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(jsonString);
 
                         if (apiResponse == null || apiResponse.Content == null)
                         {
+                            Console.WriteLine("API response or content is null, exiting loop.");
                             break; // Exit if response or content is null
                         }
 
                         allItems.AddRange(apiResponse.Content);
 
-                        // Stop if we've reached the last page
-                        if (apiResponse.Last || apiResponse.NumberOfElements < PageSize)
+                        // Stop if we've reached the last page or no more data
+                        if (apiResponse.Last || apiResponse.NumberOfElements == 0 || apiResponse.NumberOfElements < Limit)
                         {
+                            Console.WriteLine($"Last page reached. Total items: {allItems.Count}");
                             break;
                         }
 
-                        offset += PageSize; // Move to the next page
+                        offset += Limit; // Move to the next page
                     }
                     catch (WebException ex)
                     {
-                        Console.WriteLine($"Error fetching data: {ex.Message}");
+                        Console.WriteLine($"Error fetching data: {ex.Message} - Status: {ex.Status}");
                         break;
                     }
                     catch (JsonException ex)
                     {
-                        Console.WriteLine($"Error deserializing JSON: {ex.Message}");
+                        Console.WriteLine($"Error deserializing JSON: {ex.Message}"); // Removed Path
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Unexpected error: {ex.Message} - StackTrace: {ex.StackTrace}");
                         break;
                     }
                 }
             }
 
+            Console.WriteLine($"Total items fetched: {allItems.Count}");
             return allItems;
         }
     }
