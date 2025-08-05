@@ -8,26 +8,20 @@ namespace DailyAlbiExtractor
 {
     public class DataFetcher
     {
-        public const string DataFolder = "DataExtracts";
+        public const string DataFolder = @"C:\DataExtracts"; // Changed to absolute path for consistency
         private const string ApiBaseUrl = "https://politicheattive.lavoro.gov.it/albi-informatici_service/public/UI/search/paged";
         private const int SectionId = 1;
         private const string OrderBy = "id";
         private const bool Ascendente = true;
-        private const int Limit = 1000; // Set to 1000 as per your URL, which should cover all 218 records
+        private const int Limit = 1000; // Covers all expected records
 
-        /// <summary>
-        /// Fetches all data from the API, handling pagination by incrementing the offset.
-        /// </summary>
-        /// <returns>A list of ApiItem objects containing all fetched data.</returns>
         public List<ApiItem> FetchAllData()
         {
             var allItems = new List<ApiItem>();
             int offset = 0;
-
             using (var client = new WebClient())
             {
                 client.Headers.Add("Content-Type", "application/json");
-
                 while (true)
                 {
                     try
@@ -37,23 +31,18 @@ namespace DailyAlbiExtractor
                         string jsonString = client.DownloadString(url);
                         Console.WriteLine($"Received JSON length: {jsonString.Length}");
                         var apiResponse = JsonConvert.DeserializeObject<ApiResponse>(jsonString);
-
                         if (apiResponse == null || apiResponse.Content == null)
                         {
                             Console.WriteLine("API response or content is null, exiting loop.");
-                            break; // Exit if response or content is null
+                            break;
                         }
-
                         allItems.AddRange(apiResponse.Content);
-
-                        // Stop if we've reached the last page or no more data
                         if (apiResponse.Last || apiResponse.NumberOfElements == 0 || apiResponse.NumberOfElements < Limit)
                         {
                             Console.WriteLine($"Last page reached. Total items: {allItems.Count}");
                             break;
                         }
-
-                        offset += Limit; // Move to the next page
+                        offset += Limit;
                     }
                     catch (WebException ex)
                     {
@@ -62,7 +51,7 @@ namespace DailyAlbiExtractor
                     }
                     catch (JsonException ex)
                     {
-                        Console.WriteLine($"Error deserializing JSON: {ex.Message}"); // Removed Path
+                        Console.WriteLine($"Error deserializing JSON: {ex.Message}");
                         break;
                     }
                     catch (Exception ex)
@@ -72,7 +61,6 @@ namespace DailyAlbiExtractor
                     }
                 }
             }
-
             Console.WriteLine($"Total items fetched: {allItems.Count}");
             return allItems;
         }
