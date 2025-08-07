@@ -34,13 +34,13 @@ namespace DailyAlbiExtractor
         public bool AzioneGestionePoliticheAttive { get; set; }
 
         [JsonProperty("idTipologiaPersonaGiuridica")]
-        public int? IdTipologiaPersonaGiuridica { get; set; }
+        public string IdTipologiaPersonaGiuridica { get; set; }
 
         [JsonProperty("idStatoSedePatronato")]
-        public int? IdStatoSedePatronato { get; set; }
+        public string IdStatoSedePatronato { get; set; }
 
         [JsonProperty("idSedePatronato")]
-        public int? IdSedePatronato { get; set; }
+        public string IdSedePatronato { get; set; }
 
         [JsonProperty("codiceFiscale")]
         public string CodiceFiscale { get; set; }
@@ -52,37 +52,37 @@ namespace DailyAlbiExtractor
         public string RagioneSociale { get; set; }
 
         [JsonProperty("idAteco2007")]
-        public int? IdAteco2007 { get; set; }
+        public string IdAteco2007 { get; set; }
 
         [JsonProperty("idFormaGiuridica")]
-        public int? IdFormaGiuridica { get; set; }
+        public string IdFormaGiuridica { get; set; }
 
         [JsonProperty("codiceREA")]
         public string CodiceREA { get; set; }
 
         [JsonProperty("numeroSoci")]
-        public int? NumeroSoci { get; set; }
+        public string NumeroSoci { get; set; }
 
         [JsonProperty("numeroDipendenti")]
-        public int? NumeroDipendenti { get; set; }
+        public string NumeroDipendenti { get; set; }
 
         [JsonProperty("numeroCollaboratori")]
-        public int? NumeroCollaboratori { get; set; }
+        public string NumeroCollaboratori { get; set; }
 
         [JsonProperty("numeroIscrittiLibroSoci")]
-        public int? NumeroIscrittiLibroSoci { get; set; }
+        public string NumeroIscrittiLibroSoci { get; set; }
 
         [JsonProperty("capitaleSociale")]
-        public decimal? CapitaleSociale { get; set; }
+        public string CapitaleSociale { get; set; }
 
         [JsonProperty("dataCapitaleSociale")]
-        public DateTime? DataCapitaleSociale { get; set; }
+        public string DataCapitaleSociale { get; set; }
 
         [JsonProperty("codiceIscrizioneCCIAA")]
         public string CodiceIscrizioneCCIAA { get; set; }
 
         [JsonProperty("dataIscrizioneCCIAA")]
-        public DateTime? DataIscrizioneCCIAA { get; set; }
+        public string DataIscrizioneCCIAA { get; set; }
 
         [JsonProperty("sitoWeb")]
         public string SitoWeb { get; set; }
@@ -97,10 +97,10 @@ namespace DailyAlbiExtractor
         public string EmailPEC { get; set; }
 
         [JsonProperty("dataCostituzione")]
-        public DateTime? DataCostituzione { get; set; }
+        public string DataCostituzione { get; set; }
 
         [JsonProperty("dataCessazione")]
-        public DateTime? DataCessazione { get; set; }
+        public string DataCessazione { get; set; }
 
         [JsonProperty("telefono")]
         public string Telefono { get; set; }
@@ -109,7 +109,7 @@ namespace DailyAlbiExtractor
         public string Fax { get; set; }
 
         [JsonProperty("idComuneSedeLegale")]
-        public int? IdComuneSedeLegale { get; set; }
+        public int IdComuneSedeLegale { get; set; }
 
         [JsonProperty("indirizzoSedeLegale")]
         public string IndirizzoSedeLegale { get; set; }
@@ -121,16 +121,16 @@ namespace DailyAlbiExtractor
         public string CapSedeLegale { get; set; }
 
         [JsonProperty("flagPrivacy")]
-        public bool? FlagPrivacy { get; set; }
+        public string FlagPrivacy { get; set; }
 
         [JsonProperty("idCittadinanza")]
-        public int? IdCittadinanza { get; set; }
+        public string IdCittadinanza { get; set; }
 
         [JsonProperty("dataInizioValidita")]
-        public DateTime? DataInizioValidita { get; set; }
+        public string DataInizioValidita { get; set; }
 
         [JsonProperty("dataFineValidita")]
-        public DateTime? DataFineValidita { get; set; }
+        public string DataFineValidita { get; set; }
 
         [JsonProperty("utente")]
         public string Utente { get; set; }

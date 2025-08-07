@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -10,83 +9,110 @@ namespace DailyAlbiExtractor
 {
     public class ExcelHandler
     {
-        public void SaveToExcel(List<ApiItem> currentData, string filePath)
+        public void SaveToExcel(List<ApiItem> items, string filePath)
         {
-            // Find the most recent previous file if it exists
-            string directory = Path.GetDirectoryName(filePath);
-            string pattern = "FullData_*.xlsx";
-            var existingFiles = Directory.GetFiles(directory, pattern)
-                .Where(f => f != filePath) // Exclude the current file path
-                .OrderByDescending(f => f) // Sort by filename descending (yyyyMMdd is sortable)
-                .ToList();
-            string previousFilePath = existingFiles.FirstOrDefault();
-            List<ApiItem> previousItems = filePath != null ? CaricaDaExcel(filePath) : null;
+            List<ApiItem> previousItems = null;
+            string previousFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + "_prev.xlsx");
+
+            // Load previous data if it exists
+            if (File.Exists(previousFilePath))
+            {
+                previousItems = CaricaDaExcel(previousFilePath);
+            }
 
             using (var workbook = new XLWorkbook())
             {
-                // Create Data sheet
-                var dataSheet = workbook.Worksheets.Add("Data");
+                var worksheet = workbook.Worksheets.Add("Data");
+
+                // Add headers
                 var properties = typeof(ApiItem).GetProperties();
                 for (int i = 0; i < properties.Length; i++)
                 {
-                    dataSheet.Cell(1, i + 1).Value = properties[i].Name;
+                    worksheet.Cell(1, i + 1).Value = properties[i].Name;
                 }
-                // Add data rows
-                for (int row = 0; row < currentData.Count; row++)
-                {
-                    for (int col = 0; col < properties.Length; col++)
-                    {
-                        var value = properties[col].GetValue(currentData[row]);
-                        if (value is DateTime dateValue)
-                        {
-                            dataSheet.Cell(row + 2, col + 1).Value = dateValue;
-                            dataSheet.Cell(row + 2, col + 1).Style.DateFormat.Format = "yyyy-MM-dd";
-                        }
-                        else
-                        {
-                            dataSheet.Cell(row + 2, col + 1).Value = value != null ? value.ToString() : string.Empty;
-                        }
-                    }
-                }
-                // Create Changes sheet with same headers as Data sheet
-                var changesSheet = workbook.Worksheets.Add("Changes");
-                for (int i = 0; i < properties.Length; i++)
-                {
-                    changesSheet.Cell(1, i + 1).Value = properties[i].Name;
-                }
-                changesSheet.Cell(1, properties.Length + 1).Value = "ChangeType";
 
-                // Compare current and previous items
-                var changes = CompareApiItems(currentData, previousItems);
-                int changeRow = 2;
-                foreach (var change in changes)
+                // Add data rows
+                for (int row = 0; row < items.Count; row++)
                 {
                     for (int col = 0; col < properties.Length; col++)
                     {
-                        var value = change.Values[col];
+                        var value = properties[col].GetValue(items[row], null);
+                        // Handle specific types to avoid formatting issues
                         if (value is DateTime dateValue)
                         {
-                            changesSheet.Cell(changeRow, col + 1).Value = dateValue;
-                            changesSheet.Cell(changeRow, col + 1).Style.DateFormat.Format = "yyyy-MM-dd";
+                            worksheet.Cell(row + 2, col + 1).Value = dateValue;
+                            worksheet.Cell(row + 2, col + 1).Style.DateFormat.Format = "yyyy-MM-dd";
                         }
                         else
                         {
-                            changesSheet.Cell(changeRow, col + 1).Value = value != null ? value.ToString() : string.Empty;
+                            worksheet.Cell(row + 2, col + 1).Value = value != null ? value.ToString() : null ;
                         }
                     }
-                    changesSheet.Cell(changeRow, properties.Length + 1).Value = change.ChangeType;
-                    changeRow++;
                 }
-                if (!changes.Any())
+
+                // Add Changes sheet
+                var changesSheet = workbook.Worksheets.Add("Changes");
+                changesSheet.Cell(1, 1).Value = "Id";
+                changesSheet.Cell(1, 2).Value = "ChangeType";
+                changesSheet.Cell(1, 3).Value = "Details";
+
+                if (previousItems != null)
                 {
-                    changesSheet.Cell(2, 1).Value = "No changes or no previous data";
-                    changesSheet.Cell(2, properties.Length + 1).Value = "Info";
+                    // Identify changes
+                    var currentIds = items.Select(i => i.Id).ToHashSet();
+                    var previousIds = previousItems.Select(i => i.Id).ToHashSet();
+
+                    // New lines
+                    var newItems = items.Where(i => !previousIds.Contains(i.Id));
+                    // Missing lines
+                    var missingItems = previousItems.Where(i => !currentIds.Contains(i.Id));
+                    // Modified lines
+                    var modifiedItems = from curr in items
+                                        join prev in previousItems on curr.Id equals prev.Id
+                                        where !AreItemsEqual(curr, prev)
+                                        select new { Current = curr, Previous = prev };
+
+                    int changeRow = 2;
+                    foreach (var item in newItems)
+                    {
+                        changesSheet.Cell(changeRow, 1).Value = item.Id;
+                        changesSheet.Cell(changeRow, 2).Value = "New";
+                        changesSheet.Cell(changeRow, 3).Value = "New record added";
+                        changeRow++;
+                    }
+
+                    foreach (var item in missingItems)
+                    {
+                        changesSheet.Cell(changeRow, 1).Value = item.Id;
+                        changesSheet.Cell(changeRow, 2).Value = "Missing";
+                        changesSheet.Cell(changeRow, 3).Value = "Record removed";
+                        changeRow++;
+                    }
+
+                    foreach (var pair in modifiedItems)
+                    {
+                        changesSheet.Cell(changeRow, 1).Value = pair.Current.Id;
+                        changesSheet.Cell(changeRow, 2).Value = "Modified";
+                        changesSheet.Cell(changeRow, 3).Value = GetChangeDetails(pair.Previous, pair.Current);
+                        changeRow++;
+                    }
                 }
+                else
+                {
+                    changesSheet.Cell(2, 2).Value = "No previous data for comparison";
+                }
+
                 // Save the current file
                 try
                 {
+                    // Backup the previous file if it exists
+                    if (File.Exists(filePath))
+                    {
+                        File.Copy(filePath, previousFilePath, true);
+                    }
+
                     workbook.SaveAs(filePath);
-                    Console.WriteLine($"Excel file saved to: {filePath} with {currentData.Count} records");
+                    Console.WriteLine($"Excel file saved to: {filePath} with {items.Count} records");
                 }
                 catch (UnauthorizedAccessException ex)
                 {
@@ -101,242 +127,123 @@ namespace DailyAlbiExtractor
             }
         }
 
-
-
-        private List<(ApiItem Item, object[] Values, string ChangeType)> CompareApiItems(List<ApiItem> currentData, List<ApiItem> previousItems)
+        private bool AreItemsEqual(ApiItem item1, ApiItem item2)
         {
-            var changes = new List<(ApiItem, object[], string)>();
             var properties = typeof(ApiItem).GetProperties();
-            var processedIds = new HashSet<int>(); // To ensure each ID appears only once
-
-            if (previousItems == null || !previousItems.Any())
+            foreach (var prop in properties)
             {
-                return changes; // Return empty list if no previous data - no changes to report
-            }
-
-            // Iterate over current items to find new or modified items
-            foreach (var currentItem in currentData)
-            {
-                bool foundMatch = false;
-                foreach (var prevItem in previousItems)
+                var value1 = prop.GetValue(item1);
+                var value2 = prop.GetValue(item2);
+                if (value1 != value2 && (value1 == null || !value1.Equals(value2)))
                 {
-                    if (prevItem.Id == currentItem.Id)
-                    {
-                        foundMatch = true;
-                        if (!processedIds.Contains(currentItem.Id)) // Process only if not already handled
-                        {
-                            var values = new object[properties.Length];
-                            bool hasChanges = false;
-                            for (int i = 0; i < properties.Length; i++)
-                            {
-                                var prop = properties[i];
-                                var oldValue = prop.GetValue(prevItem);
-                                var newValue = prop.GetValue(currentItem);
-                                if (oldValue != newValue && (oldValue == null || !oldValue.Equals(newValue)))
-                                {
-                                    values[i] = newValue;
-                                    hasChanges = true;
-                                }
-                                else
-                                {
-                                    values[i] = null; // Unchanged properties are null (will be blank in Excel)
-                                }
-                            }
-                            if (hasChanges)
-                            {
-                                changes.Add((currentItem, values, "Modified"));
-                                processedIds.Add(currentItem.Id); // Mark as processed
-                            }
-                        }
-                        break;
-                    }
-                }
-                if (!foundMatch && !processedIds.Contains(currentItem.Id)) // New item, add only once
-                {
-                    var values = new object[properties.Length];
-                    for (int i = 0; i < properties.Length; i++)
-                    {
-                        values[i] = properties[i].GetValue(currentItem);
-                    }
-                    changes.Add((currentItem, values, "New"));
-                    processedIds.Add(currentItem.Id); // Mark as processed
+                    return false;
                 }
             }
-
-            // Iterate over previous items to check for deleted items, including the last non-matching ID
-            foreach (var prevItem in previousItems)
-            {
-                if (!currentData.Any(c => c.Id == prevItem.Id) && !processedIds.Contains(prevItem.Id))
-                {
-                    var values = new object[properties.Length];
-                    for (int i = 0; i < properties.Length; i++)
-                    {
-                        values[i] = properties[i].GetValue(prevItem);
-                    }
-                    changes.Add((prevItem, values, "Deleted"));
-                    processedIds.Add(prevItem.Id); // Mark as processed
-                }
-            }
-
-            return changes;
+            return true;
         }
 
-
+        private string GetChangeDetails(ApiItem oldItem, ApiItem newItem)
+        {
+            var changes = new List<string>();
+            var properties = typeof(ApiItem).GetProperties();
+            foreach (var prop in properties)
+            {
+                var oldValue = prop.GetValue(oldItem);
+                var newValue = prop.GetValue(newItem);
+                if (oldValue != newValue && (oldValue == null || !oldValue.Equals(newValue)))
+                {
+                    changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
+                }
+            }
+            return string.Join("; ", changes);
+        }
+        private string Normalize(string input)
+        {
+            return string.IsNullOrWhiteSpace(input) ? null : input.Trim();
+        }
 
 
         public List<ApiItem> CaricaDaExcel(string filePath)
         {
-            var workbook = new XLWorkbook(filePath);
-            var worksheet = workbook.Worksheet(1);
             var list = new List<ApiItem>();
-            foreach (var row in worksheet.RowsUsed().Skip(1)) // Salta header
+
+            try
             {
-                var tipo = new ApiItem();
-                var value1 = row.Cell(1).GetValue<string>();
-                tipo.Id = !string.IsNullOrEmpty(value1) ? int.Parse(value1) : 0;
+                var workbook = new XLWorkbook(filePath);
+                var worksheet = workbook.Worksheet(1);
 
-                var value2 = row.Cell(2).GetValue<string>();
-                tipo.AzioneView = !string.IsNullOrEmpty(value2) ? bool.Parse(value2) : false;
+                foreach (var row in worksheet.RowsUsed().Skip(1)) // Skip header
+                {
+                    var tipo = new ApiItem
+                    {
+                        Id = int.Parse(row.Cell(1).GetValue<string>()),
+                        AzioneView = bool.Parse(row.Cell(2).GetValue<string>()),
+                        AzioneEdit = bool.Parse(row.Cell(3).GetValue<string>()),
+                        AzioneDelete = bool.Parse(row.Cell(4).GetValue<string>()),
+                        AzioneStrutturaOrganizzativa = bool.Parse(row.Cell(5).GetValue<string>()),
+                        AzioneGestioneLavoratori = bool.Parse(row.Cell(6).GetValue<string>()),
+                        AzioneGestioneDelegheAmministrative = bool.Parse(row.Cell(7).GetValue<string>()),
+                        AzioneGestionePoliticheAttive = bool.Parse(row.Cell(8).GetValue<string>()),
+                        IdTipologiaPersonaGiuridica = Normalize(row.Cell(9).GetValue<string>()),
+                        IdStatoSedePatronato = Normalize(row.Cell(10).GetValue<string>()),
+                        IdSedePatronato = Normalize(row.Cell(11).GetValue<string>()),
+                        CodiceFiscale = row.Cell(12).GetValue<string>(),
+                        PartitaIVA = row.Cell(13).GetValue<string>(),
+                        RagioneSociale = row.Cell(14).GetValue<string>(),
+                        IdAteco2007 = Normalize(row.Cell(15).GetValue<string>()),
+                        IdFormaGiuridica = Normalize(row.Cell(16).GetValue<string>()),
+                        CodiceREA = Normalize(row.Cell(17).GetValue<string>()),
+                        NumeroSoci = Normalize(row.Cell(18).GetValue<string>()),
+                        NumeroDipendenti = Normalize(row.Cell(19).GetValue<string>()),
+                        NumeroCollaboratori = Normalize(row.Cell(20).GetValue<string>()),
+                        NumeroIscrittiLibroSoci = Normalize(row.Cell(21).GetValue<string>()),
+                        CapitaleSociale = Normalize(row.Cell(22).GetValue<string>()),
+                        DataCapitaleSociale = Normalize(row.Cell(23).GetValue<string>()),
+                        CodiceIscrizioneCCIAA = Normalize(row.Cell(24).GetValue<string>()),
+                        DataIscrizioneCCIAA = Normalize(row.Cell(25).GetValue<string>()),
+                        SitoWeb = Normalize(row.Cell(26).GetValue<string>()),
+                        Iban = Normalize(row.Cell(27).GetValue<string>()),
+                        Email = Normalize(row.Cell(28).GetValue<string>()),
+                        EmailPEC = Normalize(row.Cell(29).GetValue<string>()),
+                        DataCostituzione = Normalize(row.Cell(30).GetValue<string>()),
+                        DataCessazione = Normalize(row.Cell(31).GetValue<string>()),
+                        Telefono = Normalize(row.Cell(32).GetValue<string>()),
+                        Fax = Normalize(row.Cell(33).GetValue<string>()),
+                        IdComuneSedeLegale = int.Parse(row.Cell(34).GetValue<string>()),
+                        IndirizzoSedeLegale = Normalize(row.Cell(35).GetValue<string>()),
+                        CivicoSedeLegale = Normalize(row.Cell(36).GetValue<string>()),
+                        CapSedeLegale = Normalize(row.Cell(37).GetValue<string>()),
+                        FlagPrivacy = Normalize(row.Cell(38).GetValue<string>()),
+                        IdCittadinanza = Normalize(row.Cell(39).GetValue<string>()),
+                        DataInizioValidita = Normalize(row.Cell(40).GetValue<string>()),
+                        DataFineValidita = Normalize(row.Cell(41).GetValue<string>()),
+                        Utente = Normalize(row.Cell(42).GetValue<string>()),
+                        CodiceSezione = row.Cell(43).GetValue<string>(),
+                        DescrizioneSezione = row.Cell(44).GetValue<string>(),
+                        DescrizioneComuneSedeLegale = row.Cell(45).GetValue<string>(),
+                        StatoIscrizione = row.Cell(46).GetValue<string>(),
+                        IdSezioneAlbo = int.Parse(row.Cell(47).GetValue<string>()),
+                        IdAlboIntermediario = int.Parse(row.Cell(48).GetValue<string>()),
+                        IdAlboIntermediarioSezione = int.Parse(row.Cell(49).GetValue<string>()),
+                        IdTipologiaAutorizzazioneIntermediarioSezione = int.Parse(row.Cell(50).GetValue<string>()),
+                        Politica = row.Cell(51).GetValue<string>(),
+                        Recapiti = row.Cell(52).GetValue<string>(),
+                        DesDenominazioneSede = row.Cell(53).GetValue<string>(),
+                        IndirizzoSede = row.Cell(54).GetValue<string>(),
+                        Sede = row.Cell(55).GetValue<string>()
+                    };
 
-                var value3 = row.Cell(3).GetValue<string>();
-                tipo.AzioneEdit = !string.IsNullOrEmpty(value3) ? bool.Parse(value3) : false;
-
-                var value4 = row.Cell(4).GetValue<string>();
-                tipo.AzioneDelete = !string.IsNullOrEmpty(value4) ? bool.Parse(value4) : false;
-
-                var value5 = row.Cell(5).GetValue<string>();
-                tipo.AzioneStrutturaOrganizzativa = !string.IsNullOrEmpty(value5) ? bool.Parse(value5) : false;
-
-                var value6 = row.Cell(6).GetValue<string>();
-                tipo.AzioneGestioneLavoratori = !string.IsNullOrEmpty(value6) ? bool.Parse(value6) : false;
-
-                var value7 = row.Cell(7).GetValue<string>();
-                tipo.AzioneGestioneDelegheAmministrative = !string.IsNullOrEmpty(value7) ? bool.Parse(value7) : false;
-
-                var value8 = row.Cell(8).GetValue<string>();
-                tipo.AzioneGestionePoliticheAttive = !string.IsNullOrEmpty(value8) ? bool.Parse(value8) : false;
-
-                var value9 = row.Cell(9).GetValue<string>();
-                tipo.IdTipologiaPersonaGiuridica = !string.IsNullOrEmpty(value9) ? (int?)int.Parse(value9) : null;
-
-                var value10 = row.Cell(10).GetValue<string>();
-                tipo.IdStatoSedePatronato = !string.IsNullOrEmpty(value10) ? (int?)int.Parse(value10) : null;
-
-                var value11 = row.Cell(11).GetValue<string>();
-                tipo.IdSedePatronato = !string.IsNullOrEmpty(value11) ? (int?)int.Parse(value11) : null;
-
-                tipo.CodiceFiscale = row.Cell(12).GetValue<string>() ?? string.Empty;
-
-                tipo.PartitaIVA = row.Cell(13).GetValue<string>() ?? string.Empty;
-
-                tipo.RagioneSociale = row.Cell(14).GetValue<string>() ?? string.Empty;
-
-                var value15 = row.Cell(15).GetValue<string>();
-                tipo.IdAteco2007 = !string.IsNullOrEmpty(value15) ? (int?)int.Parse(value15) : null;
-
-                var value16 = row.Cell(16).GetValue<string>();
-                tipo.IdFormaGiuridica = !string.IsNullOrEmpty(value16) ? (int?)int.Parse(value16) : null;
-
-                tipo.CodiceREA = row.Cell(17).GetValue<string>() ?? string.Empty;
-
-                var value18 = row.Cell(18).GetValue<string>();
-                tipo.NumeroSoci = !string.IsNullOrEmpty(value18) ? (int?)int.Parse(value18) : null;
-
-                var value19 = row.Cell(19).GetValue<string>();
-                tipo.NumeroDipendenti = !string.IsNullOrEmpty(value19) ? (int?)int.Parse(value19) : null;
-
-                var value20 = row.Cell(20).GetValue<string>();
-                tipo.NumeroCollaboratori = !string.IsNullOrEmpty(value20) ? (int?)int.Parse(value20) : null;
-
-                var value21 = row.Cell(21).GetValue<string>();
-                tipo.NumeroIscrittiLibroSoci = !string.IsNullOrEmpty(value21) ? (int?)int.Parse(value21) : null;
-
-                var value22 = row.Cell(22).GetValue<string>();
-                tipo.CapitaleSociale = !string.IsNullOrEmpty(value22) ? (decimal?)decimal.Parse(value22) : null;
-
-                var value23 = row.Cell(23).GetValue<string>();
-                tipo.DataCapitaleSociale = !string.IsNullOrEmpty(value23) ? (DateTime?)DateTime.Parse(value23) : null;
-
-                tipo.CodiceIscrizioneCCIAA = row.Cell(24).GetValue<string>() ?? string.Empty;
-
-                var value25 = row.Cell(25).GetValue<string>();
-                tipo.DataIscrizioneCCIAA = !string.IsNullOrEmpty(value25) ? (DateTime?)DateTime.Parse(value25) : null;
-
-                tipo.SitoWeb = row.Cell(26).GetValue<string>() ?? string.Empty;
-
-                tipo.Iban = row.Cell(27).GetValue<string>() ?? string.Empty;
-
-                tipo.Email = row.Cell(28).GetValue<string>() ?? string.Empty;
-
-                tipo.EmailPEC = row.Cell(29).GetValue<string>() ?? string.Empty;
-
-                var value30 = row.Cell(30).GetValue<string>();
-                tipo.DataCostituzione = !string.IsNullOrEmpty(value30) ? (DateTime?)DateTime.Parse(value30) : null;
-
-                var value31 = row.Cell(31).GetValue<string>();
-                tipo.DataCessazione = !string.IsNullOrEmpty(value31) ? (DateTime?)DateTime.Parse(value31) : null;
-
-                tipo.Telefono = row.Cell(32).GetValue<string>() ?? string.Empty;
-
-                tipo.Fax = row.Cell(33).GetValue<string>() ?? string.Empty;
-
-                var value34 = row.Cell(34).GetValue<string>();
-                tipo.IdComuneSedeLegale = !string.IsNullOrEmpty(value34) ? (int?)int.Parse(value34) : null;
-
-                tipo.IndirizzoSedeLegale = row.Cell(35).GetValue<string>() ?? string.Empty;
-
-                tipo.CivicoSedeLegale = row.Cell(36).GetValue<string>() ?? string.Empty;
-
-                tipo.CapSedeLegale = row.Cell(37).GetValue<string>() ?? string.Empty;
-
-                var value38 = row.Cell(38).GetValue<string>();
-                tipo.FlagPrivacy = !string.IsNullOrEmpty(value38) ? (bool?)bool.Parse(value38) : null;
-
-                var value39 = row.Cell(39).GetValue<string>();
-                tipo.IdCittadinanza = !string.IsNullOrEmpty(value39) ? (int?)int.Parse(value39) : null;
-
-                var value40 = row.Cell(40).GetValue<string>();
-                tipo.DataInizioValidita = !string.IsNullOrEmpty(value40) ? (DateTime?)DateTime.Parse(value40) : null;
-
-                var value41 = row.Cell(41).GetValue<string>();
-                tipo.DataFineValidita = !string.IsNullOrEmpty(value41) ? (DateTime?)DateTime.Parse(value41) : null;
-
-                tipo.Utente = row.Cell(42).GetValue<string>() ?? string.Empty;
-
-                tipo.CodiceSezione = row.Cell(43).GetValue<string>() ?? string.Empty;
-
-                tipo.DescrizioneSezione = row.Cell(44).GetValue<string>() ?? string.Empty;
-
-                tipo.DescrizioneComuneSedeLegale = row.Cell(45).GetValue<string>() ?? string.Empty;
-
-                tipo.StatoIscrizione = row.Cell(46).GetValue<string>() ?? string.Empty;
-
-                var value47 = row.Cell(47).GetValue<string>();
-                tipo.IdSezioneAlbo = !string.IsNullOrEmpty(value47) ? int.Parse(value47) : 0;
-
-                var value48 = row.Cell(48).GetValue<string>();
-                tipo.IdAlboIntermediario = !string.IsNullOrEmpty(value48) ? int.Parse(value48) : 0;
-
-                var value49 = row.Cell(49).GetValue<string>();
-                tipo.IdAlboIntermediarioSezione = !string.IsNullOrEmpty(value49) ? int.Parse(value49) : 0;
-
-                var value50 = row.Cell(50).GetValue<string>();
-                tipo.IdTipologiaAutorizzazioneIntermediarioSezione = !string.IsNullOrEmpty(value50) ? int.Parse(value50) : 0;
-
-                tipo.Politica = row.Cell(51).GetValue<string>() ?? string.Empty;
-
-                tipo.Recapiti = row.Cell(52).GetValue<string>() ?? string.Empty;
-
-                tipo.DesDenominazioneSede = row.Cell(53).GetValue<string>() ?? string.Empty;
-
-                tipo.IndirizzoSede = row.Cell(54).GetValue<string>() ?? string.Empty;
-
-                tipo.Sede = row.Cell(55).GetValue<string>() ?? string.Empty;
-
-                list.Add(tipo);
+                    list.Add(tipo);
+                }
             }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Errore durante la lettura del file Excel: {ex.Message}");
+            }
+
             return list;
         }
+
 
         public List<ApiItem> LoadFromExcel(string filePath)
         {
@@ -344,6 +251,7 @@ namespace DailyAlbiExtractor
             using (var workbook = new XLWorkbook(filePath))
             {
                 var worksheet = workbook.Worksheet(1);
+
                 // Get headers to map columns
                 var headers = new Dictionary<string, int>();
                 var firstRow = worksheet.Row(1);
@@ -352,6 +260,7 @@ namespace DailyAlbiExtractor
                     var header = firstRow.Cell(col).Value.ToString() ?? string.Empty;
                     headers[header] = col;
                 }
+
                 // Load rows
                 foreach (var row in worksheet.RowsUsed().Skip(1))
                 {
@@ -390,10 +299,12 @@ namespace DailyAlbiExtractor
                 string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
                 string fileName = Path.GetFileName(sourceFilePath);
                 string destinationPath = Path.Combine(downloadsPath, fileName);
+
                 if (!Directory.Exists(downloadsPath))
                 {
                     Directory.CreateDirectory(downloadsPath);
                 }
+
                 File.Copy(sourceFilePath, destinationPath, true);
                 Console.WriteLine($"Excel file downloaded to: {destinationPath}");
             }
