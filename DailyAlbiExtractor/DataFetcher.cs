@@ -14,8 +14,42 @@ namespace DailyAlbiExtractor
         private const string OrderBy = "id";
         private const bool Ascendente = true;
         private const int Limit = 1000; // Covers all expected records
+        private readonly ExcelHandler _excelHandler;
 
-        public List<ApiItem> FetchAllData()
+        public DataFetcher()
+        {
+            _excelHandler = new ExcelHandler();
+        }
+
+        public List<ApiItem> FetchAllDataFromExcel()
+        {
+            var allItems = new List<ApiItem>();
+            var today = DateTime.Now.ToString("yyyyMMdd");
+            var excelFilePath = Path.Combine(DataFolder, $"FullData_{today}_prev.xlsx");
+
+            try
+            {
+                Console.WriteLine($"Reading data from Excel file: {excelFilePath}");
+                if (!File.Exists(excelFilePath))
+                {
+                    Console.WriteLine($"Excel file not found: {excelFilePath}");
+                    return allItems; // Return empty list if file doesn't exist
+                }
+
+                // Use ExcelHandler to read data from the Excel file
+                allItems = _excelHandler.CaricaDaExcel(excelFilePath);
+                Console.WriteLine($"Total items read from Excel: {allItems.Count}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error reading Excel file: {ex.Message} - StackTrace: {ex.StackTrace}");
+            }
+
+            Console.WriteLine($"Total items fetched from Excel: {allItems.Count}");
+            return allItems;
+        }
+
+        public List<ApiItem> FetchAllDataFromApi()
         {
             var allItems = new List<ApiItem>();
             int offset = 0;
@@ -61,7 +95,7 @@ namespace DailyAlbiExtractor
                     }
                 }
             }
-            Console.WriteLine($"Total items fetched: {allItems.Count}");
+            Console.WriteLine($"Total items fetched from API: {allItems.Count}");
             return allItems;
         }
     }

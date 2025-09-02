@@ -20,22 +20,37 @@ namespace DailyAlbiExtractor
             Directory.CreateDirectory(DataFetcher.DataFolder);
             Console.WriteLine($"Data folder created/verified: {DataFetcher.DataFolder}");
 
-            // Fetch current data
+
             var fetcher = new DataFetcher();
-            var currentData = fetcher.FetchAllData();
+
+            // Fetch local data
+            var localData = fetcher.FetchAllDataFromExcel();
+            Console.WriteLine($"Fetched {localData.Count} items");
+
+            // Fetch current data
+            var currentData = fetcher.FetchAllDataFromApi();
             Console.WriteLine($"Fetched {currentData.Count} items");
 
             // Generate filenames with today's date
             var today = DateTime.Now.ToString("yyyyMMdd");
             var fullExcelPath = Path.Combine(DataFetcher.DataFolder, $"FullData_{today}.xlsx");
-           
-            // Save full data to Excel
+            var changesExcelPath = Path.Combine(DataFetcher.DataFolder, $"FullData_{today}_Changes.xlsx");
+
+            // Save full data and changes to Excel
             var excelHandler = new ExcelHandler();
             excelHandler.SaveToExcel(currentData, fullExcelPath);
 
-          
+            // Download both Excel files
             excelHandler.DownloadExcelFile(fullExcelPath);
-           
+            if (File.Exists(changesExcelPath))
+            {
+                excelHandler.DownloadExcelFile(changesExcelPath);
+            }
+            else
+            {
+                Console.WriteLine($"Changes file not found at: {changesExcelPath}");
+            }
+
             Console.WriteLine($"Execution completed at {DateTime.Now}");
         }
     }

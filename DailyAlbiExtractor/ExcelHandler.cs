@@ -13,24 +13,22 @@ namespace DailyAlbiExtractor
         {
             List<ApiItem> previousItems = null;
             string previousFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + "_prev.xlsx");
-
+            string changesFilePath = Path.Combine(Path.GetDirectoryName(filePath), Path.GetFileNameWithoutExtension(filePath) + "_Changes.xlsx");
             // Load previous data if it exists
             if (File.Exists(previousFilePath))
             {
                 previousItems = CaricaDaExcel(previousFilePath);
             }
-
+            // Create workbook for Data sheet
             using (var workbook = new XLWorkbook())
             {
                 var worksheet = workbook.Worksheets.Add("Data");
-
                 // Add headers
                 var properties = typeof(ApiItem).GetProperties();
                 for (int i = 0; i < properties.Length; i++)
                 {
                     worksheet.Cell(1, i + 1).Value = properties[i].Name;
                 }
-
                 // Add data rows
                 for (int row = 0; row < items.Count; row++)
                 {
@@ -45,64 +43,11 @@ namespace DailyAlbiExtractor
                         }
                         else
                         {
-                            worksheet.Cell(row + 2, col + 1).Value = value != null ? value.ToString() : null ;
+                            worksheet.Cell(row + 2, col + 1).Value = value != null ? value.ToString() : null;
                         }
                     }
                 }
-
-                // Add Changes sheet
-                var changesSheet = workbook.Worksheets.Add("Changes");
-                changesSheet.Cell(1, 1).Value = "Id";
-                changesSheet.Cell(1, 2).Value = "ChangeType";
-                changesSheet.Cell(1, 3).Value = "Details";
-
-                if (previousItems != null)
-                {
-                    // Identify changes
-                    var currentIds = items.Select(i => i.Id).ToHashSet();
-                    var previousIds = previousItems.Select(i => i.Id).ToHashSet();
-
-                    // New lines
-                    var newItems = items.Where(i => !previousIds.Contains(i.Id));
-                    // Missing lines
-                    var missingItems = previousItems.Where(i => !currentIds.Contains(i.Id));
-                    // Modified lines
-                    var modifiedItems = from curr in items
-                                        join prev in previousItems on curr.Id equals prev.Id
-                                        where !AreItemsEqual(curr, prev)
-                                        select new { Current = curr, Previous = prev };
-
-                    int changeRow = 2;
-                    foreach (var item in newItems)
-                    {
-                        changesSheet.Cell(changeRow, 1).Value = item.Id;
-                        changesSheet.Cell(changeRow, 2).Value = "New";
-                        changesSheet.Cell(changeRow, 3).Value = "New record added";
-                        changeRow++;
-                    }
-
-                    foreach (var item in missingItems)
-                    {
-                        changesSheet.Cell(changeRow, 1).Value = item.Id;
-                        changesSheet.Cell(changeRow, 2).Value = "Missing";
-                        changesSheet.Cell(changeRow, 3).Value = "Record removed";
-                        changeRow++;
-                    }
-
-                    foreach (var pair in modifiedItems)
-                    {
-                        changesSheet.Cell(changeRow, 1).Value = pair.Current.Id;
-                        changesSheet.Cell(changeRow, 2).Value = "Modified";
-                        changesSheet.Cell(changeRow, 3).Value = GetChangeDetails(pair.Previous, pair.Current);
-                        changeRow++;
-                    }
-                }
-                else
-                {
-                    changesSheet.Cell(2, 2).Value = "No previous data for comparison";
-                }
-
-                // Save the current file
+                // Save the Data workbook
                 try
                 {
                     // Backup the previous file if it exists
@@ -110,7 +55,6 @@ namespace DailyAlbiExtractor
                     {
                         File.Copy(filePath, previousFilePath, true);
                     }
-
                     workbook.SaveAs(filePath);
                     Console.WriteLine($"Excel file saved to: {filePath} with {items.Count} records");
                 }
@@ -125,8 +69,121 @@ namespace DailyAlbiExtractor
                     throw;
                 }
             }
-        }
+            // Create separate workbook for Changes sheet
+            using (var changesWorkbook = new XLWorkbook())
+            {
+                var changesSheet = changesWorkbook.Worksheets.Add("Changes");
+                // Add headers matching ApiItem properties
+                var properties = typeof(ApiItem).GetProperties();
+                for (int i = 0; i < properties.Length; i++)
+                {
+                    changesSheet.Cell(1, i + 1).Value = properties[i].Name;
+                }
 
+                int changeRow = 2;
+                if (previousItems != null)
+                {
+                    // Identify changes
+                    var currentIds = items.Select(i => i.Id).ToHashSet();
+                    var previousIds = previousItems.Select(i => i.Id).ToHashSet();
+                    // New lines
+                    var newItems = items.Where(i => !previousIds.Contains(i.Id));
+                    // Missing lines
+                    var missingItems = previousItems.Where(i => !currentIds.Contains(i.Id));
+                    // Modified lines
+                    var modifiedItems = from curr in items
+                                        join prev in previousItems on curr.Id equals prev.Id
+                                        where !AreItemsEqual(curr, prev)
+                                        select new { Current = curr, Previous = prev };
+                    foreach (var item in newItems)
+                    {
+                        for (int c = 0; c < properties.Length; c++)
+                        {
+                            var value = properties[c].GetValue(item, null);
+                            // Handle specific types to avoid formatting issues
+                            if (value is DateTime dateValue)
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = dateValue;
+                                changesSheet.Cell(changeRow, c + 1).Style.DateFormat.Format = "yyyy-MM-dd";
+                            }
+                            else if (properties[c].Name == "DescrizioneSezione")
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = "New";
+                            }
+                            else
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = value != null ? value.ToString() : null;
+                            }
+                        }
+                        changeRow++;
+                    }
+                    foreach (var item in missingItems)
+                    {
+                        for (int c = 0; c < properties.Length; c++)
+                        {
+                            var value = properties[c].GetValue(item, null);
+                            // Handle specific types to avoid formatting issues
+                            if (value is DateTime dateValue)
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = dateValue;
+                                changesSheet.Cell(changeRow, c + 1).Style.DateFormat.Format = "yyyy-MM-dd";
+                            }
+                            else if (properties[c].Name == "DescrizioneSezione")
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = "Missing";
+                            }
+                            else
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = value != null ? value.ToString() : null;
+                            }
+                        }
+                        changeRow++;
+                    }
+                    foreach (var pair in modifiedItems)
+                    {
+                        for (int c = 0; c < properties.Length; c++)
+                        {
+                            var value = properties[c].GetValue(pair.Current, null);
+                            // Handle specific types to avoid formatting issues
+                            if (value is DateTime dateValue)
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = dateValue;
+                                changesSheet.Cell(changeRow, c + 1).Style.DateFormat.Format = "yyyy-MM-dd";
+                            }
+                            else if (properties[c].Name == "DescrizioneSezione")
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = GetChangeDetails(pair.Previous, pair.Current);
+                            }
+                            else
+                            {
+                                changesSheet.Cell(changeRow, c + 1).Value = value != null ? value.ToString() : null;
+                            }
+                        }
+                        changeRow++;
+                    }
+                }
+                else
+                {
+                    changesSheet.Cell(2, 1).Value = "No previous data for comparison";
+                }
+                // Save the Changes workbook
+                try
+                {
+                    changesWorkbook.SaveAs(changesFilePath);
+                    Console.WriteLine($"Changes Excel file saved to: {changesFilePath}");
+                }
+                catch (UnauthorizedAccessException ex)
+                {
+                    Console.WriteLine($"Permission error saving Changes Excel file to {changesFilePath}: {ex.Message}");
+                    throw;
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error saving Changes Excel file to {changesFilePath}: {ex.Message}");
+                    throw;
+                }
+            }
+        }
         private bool AreItemsEqual(ApiItem item1, ApiItem item2)
         {
             var properties = typeof(ApiItem).GetProperties();
@@ -141,7 +198,6 @@ namespace DailyAlbiExtractor
             }
             return true;
         }
-
         private string GetChangeDetails(ApiItem oldItem, ApiItem newItem)
         {
             var changes = new List<string>();
@@ -161,17 +217,13 @@ namespace DailyAlbiExtractor
         {
             return string.IsNullOrWhiteSpace(input) ? null : input.Trim();
         }
-
-
-        public List<ApiItem> CaricaDaExcel(string filePath)
+        public List<ApiItem> CaricaDaExcel(string previousFilePath)
         {
             var list = new List<ApiItem>();
-
             try
             {
-                var workbook = new XLWorkbook(filePath);
+                var workbook = new XLWorkbook(previousFilePath);
                 var worksheet = workbook.Worksheet(1);
-
                 foreach (var row in worksheet.RowsUsed().Skip(1)) // Skip header
                 {
                     var tipo = new ApiItem
@@ -232,7 +284,6 @@ namespace DailyAlbiExtractor
                         IndirizzoSede = row.Cell(54).GetValue<string>(),
                         Sede = row.Cell(55).GetValue<string>()
                     };
-
                     list.Add(tipo);
                 }
             }
@@ -240,18 +291,14 @@ namespace DailyAlbiExtractor
             {
                 Console.WriteLine($"Errore durante la lettura del file Excel: {ex.Message}");
             }
-
             return list;
         }
-
-
         public List<ApiItem> LoadFromExcel(string filePath)
         {
             var items = new List<ApiItem>();
             using (var workbook = new XLWorkbook(filePath))
             {
                 var worksheet = workbook.Worksheet(1);
-
                 // Get headers to map columns
                 var headers = new Dictionary<string, int>();
                 var firstRow = worksheet.Row(1);
@@ -260,7 +307,6 @@ namespace DailyAlbiExtractor
                     var header = firstRow.Cell(col).Value.ToString() ?? string.Empty;
                     headers[header] = col;
                 }
-
                 // Load rows
                 foreach (var row in worksheet.RowsUsed().Skip(1))
                 {
@@ -291,7 +337,6 @@ namespace DailyAlbiExtractor
             }
             return items;
         }
-
         public void DownloadExcelFile(string sourceFilePath)
         {
             if (File.Exists(sourceFilePath))
@@ -299,12 +344,10 @@ namespace DailyAlbiExtractor
                 string downloadsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
                 string fileName = Path.GetFileName(sourceFilePath);
                 string destinationPath = Path.Combine(downloadsPath, fileName);
-
                 if (!Directory.Exists(downloadsPath))
                 {
                     Directory.CreateDirectory(downloadsPath);
                 }
-
                 File.Copy(sourceFilePath, destinationPath, true);
                 Console.WriteLine($"Excel file downloaded to: {destinationPath}");
             }
