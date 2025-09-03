@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Text;
 using ClosedXML.Excel;
 
 namespace DailyAlbiExtractor
@@ -215,7 +216,45 @@ namespace DailyAlbiExtractor
         }
         private string Normalize(string input)
         {
-            return string.IsNullOrWhiteSpace(input) ? null : input.Trim();
+            var stringInput = CleanString(input);
+
+            return string.IsNullOrWhiteSpace(stringInput) ? null : stringInput.Trim();
+        }
+        private static string CleanString(string input)
+        {
+            if (string.IsNullOrEmpty(input)) return string.Empty;
+            var result = input
+                .Trim()
+                .Replace("\r\n", "\n")
+                .Replace("\r", "\n")
+                .Replace("\t", " ")                        // Tab -> spazio
+                .Replace("\u00A0", " ")                    // Non-breaking space
+                .Replace("\u2000", " ")                    // En quad
+                .Replace("\u2001", " ")                    // Em quad
+                .Replace("\u2002", " ")                    // En space
+                .Replace("\u2003", " ")                    // Em space
+                .Replace("\u2004", " ")                    // Three-per-em space
+                .Replace("\u2005", " ")                    // Four-per-em space
+                .Replace("\u2006", " ")                    // Six-per-em space
+                .Replace("\u2007", " ")                    // Figure space
+                .Replace("\u2008", " ")                    // Punctuation space
+                .Replace("\u2009", " ")                    // Thin space
+                .Replace("\u200A", " ")                    // Hair space
+                .Replace("''", "'")                        // Double single quotes -> single quote
+                .Replace("\"\"", "\"")                     // Double double-quotes -> single double-quote  
+                .Normalize(NormalizationForm.FormC)
+                .Trim();
+            // Handle escaped quotes at beginning/end of string
+            while (result.StartsWith("''"))
+                result = result.Substring(1);
+            while (result.EndsWith("''") && result.Length > 2)
+                result = result.Substring(0, result.Length - 1);
+            // Also remove single quotes at start/end (common in Excel CSV issues)
+            while (result.StartsWith("'") && !result.Substring(1).StartsWith("'"))
+                result = result.Substring(1);
+            while (result.EndsWith("'") && result.Length > 1 && !result.Substring(0, result.Length - 1).EndsWith("'"))
+                result = result.Substring(0, result.Length - 1);
+            return result;
         }
         public List<ApiItem> CaricaDaExcel(string previousFilePath)
         {
@@ -241,7 +280,7 @@ namespace DailyAlbiExtractor
                         IdSedePatronato = Normalize(row.Cell(11).GetValue<string>()),
                         CodiceFiscale = row.Cell(12).GetValue<string>(),
                         PartitaIVA = row.Cell(13).GetValue<string>(),
-                        RagioneSociale = row.Cell(14).GetValue<string>(),
+                        RagioneSociale = Normalize(row.Cell(14).GetValue<string>()),
                         IdAteco2007 = Normalize(row.Cell(15).GetValue<string>()),
                         IdFormaGiuridica = Normalize(row.Cell(16).GetValue<string>()),
                         CodiceREA = Normalize(row.Cell(17).GetValue<string>()),
