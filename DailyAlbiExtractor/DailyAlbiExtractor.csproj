@@ -112,6 +112,7 @@
     <Compile Include="DataFetcher.cs" />
     <Compile Include="EmailSender.cs" />
     <Compile Include="ExcelHandler.cs" />
+    <Compile Include="GmailSmtpQuickTest.cs" />
     <Compile Include="Pageable.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
