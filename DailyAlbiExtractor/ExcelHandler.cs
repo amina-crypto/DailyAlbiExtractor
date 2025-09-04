@@ -211,36 +211,55 @@ namespace DailyAlbiExtractor
             return true;
         }
 
+        //private string GetChangeDetails(ApiItem oldItem, ApiItem newItem)
+        //{
+        //    var changes = new List<string>();
+        //    var properties = typeof(ApiItem).GetProperties();
+        //    foreach (var prop in properties)
+        //    {
+        //        var oldValue = prop.GetValue(oldItem);
+        //        var newValue = prop.GetValue(newItem);
+
+        //        // Handle null values
+        //        if (oldValue == null && newValue == null) continue;
+        //        if (oldValue == null || newValue == null)
+        //        {
+        //            changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
+        //            continue;
+        //        }
+
+        //        // Normalize strings before comparison
+        //        if (oldValue is string oldStr && newValue is string newStr)
+        //        {
+        //            if (!Normalize(oldStr).Equals(Normalize(newStr), StringComparison.OrdinalIgnoreCase))
+        //            {
+        //                changes.Add($"{prop.Name}: {oldStr ?? "null"} -> {newStr ?? "null"}");
+        //            }
+        //        }
+        //        else if (!oldValue.Equals(newValue))
+        //        {
+        //            changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
+        //        }
+        //    }
+        //    return string.Join("; ", changes);
+        //}
         private string GetChangeDetails(ApiItem oldItem, ApiItem newItem)
         {
             var changes = new List<string>();
             var properties = typeof(ApiItem).GetProperties();
+
             foreach (var prop in properties)
             {
                 var oldValue = prop.GetValue(oldItem);
                 var newValue = prop.GetValue(newItem);
 
-                // Handle null values
-                if (oldValue == null && newValue == null) continue;
-                if (oldValue == null || newValue == null)
-                {
-                    changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
-                    continue;
-                }
-
-                // Normalize strings before comparison
-                if (oldValue is string oldStr && newValue is string newStr)
-                {
-                    if (!Normalize(oldStr).Equals(Normalize(newStr), StringComparison.OrdinalIgnoreCase))
-                    {
-                        changes.Add($"{prop.Name}: {oldStr ?? "null"} -> {newStr ?? "null"}");
-                    }
-                }
-                else if (!oldValue.Equals(newValue))
+                // Krahasim i sigurtë për vlera/reference, përfshin null checks
+                if (!object.Equals(oldValue, newValue))
                 {
                     changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
                 }
             }
+
             return string.Join("; ", changes);
         }
 
