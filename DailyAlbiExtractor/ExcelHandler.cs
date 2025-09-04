@@ -74,90 +74,81 @@ namespace DailyAlbiExtractor
             using (var changesWorkbook = new XLWorkbook())
             {
                 var changesSheet = changesWorkbook.Worksheets.Add("Changes");
-                // Add headers matching ApiItem properties
+                // Add headers with Status as first column followed by ApiItem properties
+                changesSheet.Cell(1, 1).Value = "Status";
                 var properties = typeof(ApiItem).GetProperties();
                 for (int i = 0; i < properties.Length; i++)
                 {
-                    changesSheet.Cell(1, i + 1).Value = properties[i].Name;
+                    changesSheet.Cell(1, i + 2).Value = properties[i].Name;
                 }
-
                 int changeRow = 2;
                 if (previousItems != null)
                 {
                     // Identify changes
-                    var currentIds = items.Select(i => i.Id).ToHashSet();
-                    var previousIds = previousItems.Select(i => i.Id).ToHashSet();
+                    var currentIds = items.Select(i => i.IdAlboIntermediario).ToHashSet();
+                    var previousIds = previousItems.Select(i => i.IdAlboIntermediario).ToHashSet();
                     // New lines
-                    var newItems = items.Where(i => !previousIds.Contains(i.Id));
+                    var newItems = items.Where(i => !previousIds.Contains(i.IdAlboIntermediario));
                     // Missing lines
-                    var missingItems = previousItems.Where(i => !currentIds.Contains(i.Id));
+                    var missingItems = previousItems.Where(i => !currentIds.Contains(i.IdAlboIntermediario));
                     // Modified lines
                     var modifiedItems = from curr in items
-                                        join prev in previousItems on curr.Id equals prev.Id
+                                        join prev in previousItems on curr.IdAlboIntermediario equals prev.IdAlboIntermediario
                                         where !AreItemsEqual(curr, prev)
                                         select new { Current = curr, Previous = prev };
                     foreach (var item in newItems)
                     {
+                        changesSheet.Cell(changeRow, 1).Value = "New";
                         for (int c = 0; c < properties.Length; c++)
                         {
                             var value = properties[c].GetValue(item, null);
                             // Handle specific types to avoid formatting issues
                             if (value is DateTime dateValue)
                             {
-                                changesSheet.Cell(changeRow, c + 1).Value = dateValue;
-                                changesSheet.Cell(changeRow, c + 1).Style.DateFormat.Format = "yyyy-MM-dd";
-                            }
-                            else if (properties[c].Name == "DescrizioneSezione")
-                            {
-                                changesSheet.Cell(changeRow, c + 1).Value = "New";
+                                changesSheet.Cell(changeRow, c + 2).Value = dateValue;
+                                changesSheet.Cell(changeRow, c + 2).Style.DateFormat.Format = "yyyy-MM-dd";
                             }
                             else
                             {
-                                changesSheet.Cell(changeRow, c + 1).Value = value != null ? value.ToString() : null;
+                                changesSheet.Cell(changeRow, c + 2).Value = value != null ? value.ToString() : null;
                             }
                         }
                         changeRow++;
                     }
                     foreach (var item in missingItems)
                     {
+                        changesSheet.Cell(changeRow, 1).Value = "Missing";
                         for (int c = 0; c < properties.Length; c++)
                         {
                             var value = properties[c].GetValue(item, null);
                             // Handle specific types to avoid formatting issues
                             if (value is DateTime dateValue)
                             {
-                                changesSheet.Cell(changeRow, c + 1).Value = dateValue;
-                                changesSheet.Cell(changeRow, c + 1).Style.DateFormat.Format = "yyyy-MM-dd";
-                            }
-                            else if (properties[c].Name == "DescrizioneSezione")
-                            {
-                                changesSheet.Cell(changeRow, c + 1).Value = "Missing";
+                                changesSheet.Cell(changeRow, c + 2).Value = dateValue;
+                                changesSheet.Cell(changeRow, c + 2).Style.DateFormat.Format = "yyyy-MM-dd";
                             }
                             else
                             {
-                                changesSheet.Cell(changeRow, c + 1).Value = value != null ? value.ToString() : null;
+                                changesSheet.Cell(changeRow, c + 2).Value = value != null ? value.ToString() : null;
                             }
                         }
                         changeRow++;
                     }
                     foreach (var pair in modifiedItems)
                     {
+                        changesSheet.Cell(changeRow, 1).Value = GetChangeDetails(pair.Previous, pair.Current);
                         for (int c = 0; c < properties.Length; c++)
                         {
                             var value = properties[c].GetValue(pair.Current, null);
                             // Handle specific types to avoid formatting issues
                             if (value is DateTime dateValue)
                             {
-                                changesSheet.Cell(changeRow, c + 1).Value = dateValue;
-                                changesSheet.Cell(changeRow, c + 1).Style.DateFormat.Format = "yyyy-MM-dd";
-                            }
-                            else if (properties[c].Name == "DescrizioneSezione")
-                            {
-                                changesSheet.Cell(changeRow, c + 1).Value = GetChangeDetails(pair.Previous, pair.Current);
+                                changesSheet.Cell(changeRow, c + 2).Value = dateValue;
+                                changesSheet.Cell(changeRow, c + 2).Style.DateFormat.Format = "yyyy-MM-dd";
                             }
                             else
                             {
-                                changesSheet.Cell(changeRow, c + 1).Value = value != null ? value.ToString() : null;
+                                changesSheet.Cell(changeRow, c + 2).Value = value != null ? value.ToString() : null;
                             }
                         }
                         changeRow++;
@@ -192,13 +183,34 @@ namespace DailyAlbiExtractor
             {
                 var value1 = prop.GetValue(item1);
                 var value2 = prop.GetValue(item2);
-                if (value1 != value2 && (value1 == null || !value1.Equals(value2)))
+
+                // Handle null values
+                if (value1 == null && value2 == null) continue;
+                if (value1 == null || value2 == null) return false;
+
+                // Normalize strings before comparison
+                if (value1 is string str1 && value2 is string str2)
+                {
+                    var normalized1 = Normalize(str1);
+                    var normalized2 = Normalize(str2);
+                    // If both are null after normalization, consider them equal
+                    if (normalized1 == null && normalized2 == null) continue;
+                    // If one is null and the other isn't, they are different
+                    if (normalized1 == null || normalized2 == null) return false;
+                    // Compare normalized strings
+                    if (!normalized1.Equals(normalized2, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return false;
+                    }
+                }
+                else if (!value1.Equals(value2))
                 {
                     return false;
                 }
             }
             return true;
         }
+
         private string GetChangeDetails(ApiItem oldItem, ApiItem newItem)
         {
             var changes = new List<string>();
@@ -207,19 +219,37 @@ namespace DailyAlbiExtractor
             {
                 var oldValue = prop.GetValue(oldItem);
                 var newValue = prop.GetValue(newItem);
-                if (oldValue != newValue && (oldValue == null || !oldValue.Equals(newValue)))
+
+                // Handle null values
+                if (oldValue == null && newValue == null) continue;
+                if (oldValue == null || newValue == null)
+                {
+                    changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
+                    continue;
+                }
+
+                // Normalize strings before comparison
+                if (oldValue is string oldStr && newValue is string newStr)
+                {
+                    if (!Normalize(oldStr).Equals(Normalize(newStr), StringComparison.OrdinalIgnoreCase))
+                    {
+                        changes.Add($"{prop.Name}: {oldStr ?? "null"} -> {newStr ?? "null"}");
+                    }
+                }
+                else if (!oldValue.Equals(newValue))
                 {
                     changes.Add($"{prop.Name}: {oldValue ?? "null"} -> {newValue ?? "null"}");
                 }
             }
             return string.Join("; ", changes);
         }
+
         private string Normalize(string input)
         {
             var stringInput = CleanString(input);
-
             return string.IsNullOrWhiteSpace(stringInput) ? null : stringInput.Trim();
         }
+
         private static string CleanString(string input)
         {
             if (string.IsNullOrEmpty(input)) return string.Empty;
@@ -227,21 +257,21 @@ namespace DailyAlbiExtractor
                 .Trim()
                 .Replace("\r\n", "\n")
                 .Replace("\r", "\n")
-                .Replace("\t", " ")                        // Tab -> spazio
-                .Replace("\u00A0", " ")                    // Non-breaking space
-                .Replace("\u2000", " ")                    // En quad
-                .Replace("\u2001", " ")                    // Em quad
-                .Replace("\u2002", " ")                    // En space
-                .Replace("\u2003", " ")                    // Em space
-                .Replace("\u2004", " ")                    // Three-per-em space
-                .Replace("\u2005", " ")                    // Four-per-em space
-                .Replace("\u2006", " ")                    // Six-per-em space
-                .Replace("\u2007", " ")                    // Figure space
-                .Replace("\u2008", " ")                    // Punctuation space
-                .Replace("\u2009", " ")                    // Thin space
-                .Replace("\u200A", " ")                    // Hair space
-                .Replace("''", "'")                        // Double single quotes -> single quote
-                .Replace("\"\"", "\"")                     // Double double-quotes -> single double-quote  
+                .Replace("\t", " ") // Tab -> spazio
+                .Replace("\u00A0", " ") // Non-breaking space
+                .Replace("\u2000", " ") // En quad
+                .Replace("\u2001", " ") // Em quad
+                .Replace("\u2002", " ") // En space
+                .Replace("\u2003", " ") // Em space
+                .Replace("\u2004", " ") // Three-per-em space
+                .Replace("\u2005", " ") // Four-per-em space
+                .Replace("\u2006", " ") // Six-per-em space
+                .Replace("\u2007", " ") // Figure space
+                .Replace("\u2008", " ") // Punctuation space
+                .Replace("\u2009", " ") // Thin space
+                .Replace("\u200A", " ") // Hair space
+                .Replace("''", "'") // Double single quotes -> single quote
+                .Replace("\"\"", "\"") // Double double-quotes -> single double-quote
                 .Normalize(NormalizationForm.FormC)
                 .Trim();
             // Handle escaped quotes at beginning/end of string
@@ -256,74 +286,89 @@ namespace DailyAlbiExtractor
                 result = result.Substring(0, result.Length - 1);
             return result;
         }
+
         public List<ApiItem> CaricaDaExcel(string previousFilePath)
         {
             var list = new List<ApiItem>();
             try
             {
-                var workbook = new XLWorkbook(previousFilePath);
-                var worksheet = workbook.Worksheet(1);
-                foreach (var row in worksheet.RowsUsed().Skip(1)) // Skip header
+                if (!File.Exists(previousFilePath))
                 {
-                    var tipo = new ApiItem
+                    Console.WriteLine($"File not found: {previousFilePath}");
+                    return list;
+                }
+
+                using (var workbook = new XLWorkbook(previousFilePath))
+                {
+                    var worksheet = workbook.Worksheet(1);
+                    if (worksheet == null)
                     {
-                        Id = int.Parse(row.Cell(1).GetValue<string>()),
-                        AzioneView = bool.Parse(row.Cell(2).GetValue<string>()),
-                        AzioneEdit = bool.Parse(row.Cell(3).GetValue<string>()),
-                        AzioneDelete = bool.Parse(row.Cell(4).GetValue<string>()),
-                        AzioneStrutturaOrganizzativa = bool.Parse(row.Cell(5).GetValue<string>()),
-                        AzioneGestioneLavoratori = bool.Parse(row.Cell(6).GetValue<string>()),
-                        AzioneGestioneDelegheAmministrative = bool.Parse(row.Cell(7).GetValue<string>()),
-                        AzioneGestionePoliticheAttive = bool.Parse(row.Cell(8).GetValue<string>()),
-                        IdTipologiaPersonaGiuridica = Normalize(row.Cell(9).GetValue<string>()),
-                        IdStatoSedePatronato = Normalize(row.Cell(10).GetValue<string>()),
-                        IdSedePatronato = Normalize(row.Cell(11).GetValue<string>()),
-                        CodiceFiscale = row.Cell(12).GetValue<string>(),
-                        PartitaIVA = row.Cell(13).GetValue<string>(),
-                        RagioneSociale = Normalize(row.Cell(14).GetValue<string>()),
-                        IdAteco2007 = Normalize(row.Cell(15).GetValue<string>()),
-                        IdFormaGiuridica = Normalize(row.Cell(16).GetValue<string>()),
-                        CodiceREA = Normalize(row.Cell(17).GetValue<string>()),
-                        NumeroSoci = Normalize(row.Cell(18).GetValue<string>()),
-                        NumeroDipendenti = Normalize(row.Cell(19).GetValue<string>()),
-                        NumeroCollaboratori = Normalize(row.Cell(20).GetValue<string>()),
-                        NumeroIscrittiLibroSoci = Normalize(row.Cell(21).GetValue<string>()),
-                        CapitaleSociale = Normalize(row.Cell(22).GetValue<string>()),
-                        DataCapitaleSociale = Normalize(row.Cell(23).GetValue<string>()),
-                        CodiceIscrizioneCCIAA = Normalize(row.Cell(24).GetValue<string>()),
-                        DataIscrizioneCCIAA = Normalize(row.Cell(25).GetValue<string>()),
-                        SitoWeb = Normalize(row.Cell(26).GetValue<string>()),
-                        Iban = Normalize(row.Cell(27).GetValue<string>()),
-                        Email = Normalize(row.Cell(28).GetValue<string>()),
-                        EmailPEC = Normalize(row.Cell(29).GetValue<string>()),
-                        DataCostituzione = Normalize(row.Cell(30).GetValue<string>()),
-                        DataCessazione = Normalize(row.Cell(31).GetValue<string>()),
-                        Telefono = Normalize(row.Cell(32).GetValue<string>()),
-                        Fax = Normalize(row.Cell(33).GetValue<string>()),
-                        IdComuneSedeLegale = int.Parse(row.Cell(34).GetValue<string>()),
-                        IndirizzoSedeLegale = Normalize(row.Cell(35).GetValue<string>()),
-                        CivicoSedeLegale = Normalize(row.Cell(36).GetValue<string>()),
-                        CapSedeLegale = Normalize(row.Cell(37).GetValue<string>()),
-                        FlagPrivacy = Normalize(row.Cell(38).GetValue<string>()),
-                        IdCittadinanza = Normalize(row.Cell(39).GetValue<string>()),
-                        DataInizioValidita = Normalize(row.Cell(40).GetValue<string>()),
-                        DataFineValidita = Normalize(row.Cell(41).GetValue<string>()),
-                        Utente = Normalize(row.Cell(42).GetValue<string>()),
-                        CodiceSezione = row.Cell(43).GetValue<string>(),
-                        DescrizioneSezione = row.Cell(44).GetValue<string>(),
-                        DescrizioneComuneSedeLegale = row.Cell(45).GetValue<string>(),
-                        StatoIscrizione = row.Cell(46).GetValue<string>(),
-                        IdSezioneAlbo = int.Parse(row.Cell(47).GetValue<string>()),
-                        IdAlboIntermediario = int.Parse(row.Cell(48).GetValue<string>()),
-                        IdAlboIntermediarioSezione = int.Parse(row.Cell(49).GetValue<string>()),
-                        IdTipologiaAutorizzazioneIntermediarioSezione = int.Parse(row.Cell(50).GetValue<string>()),
-                        Politica = row.Cell(51).GetValue<string>(),
-                        Recapiti = row.Cell(52).GetValue<string>(),
-                        DesDenominazioneSede = row.Cell(53).GetValue<string>(),
-                        IndirizzoSede = row.Cell(54).GetValue<string>(),
-                        Sede = row.Cell(55).GetValue<string>()
-                    };
-                    list.Add(tipo);
+                        Console.WriteLine("No worksheet found in the Excel file.");
+                        return list;
+                    }
+
+                    foreach (var row in worksheet.RowsUsed().Skip(1)) // Skip header
+                    {
+                        var tipo = new ApiItem
+                        {
+                            Id = ParseInt(row.Cell(1).GetValue<string>() ?? "0"),
+                            AzioneView = ParseBool(row.Cell(2).GetValue<string>() ?? "false"),
+                            AzioneEdit = ParseBool(row.Cell(3).GetValue<string>() ?? "false"),
+                            AzioneDelete = ParseBool(row.Cell(4).GetValue<string>() ?? "false"),
+                            AzioneStrutturaOrganizzativa = ParseBool(row.Cell(5).GetValue<string>() ?? "false"),
+                            AzioneGestioneLavoratori = ParseBool(row.Cell(6).GetValue<string>() ?? "false"),
+                            AzioneGestioneDelegheAmministrative = ParseBool(row.Cell(7).GetValue<string>() ?? "false"),
+                            AzioneGestionePoliticheAttive = ParseBool(row.Cell(8).GetValue<string>() ?? "false"),
+                            IdTipologiaPersonaGiuridica = Normalize(row.Cell(9).GetValue<string>()),
+                            IdStatoSedePatronato = Normalize(row.Cell(10).GetValue<string>()),
+                            IdSedePatronato = Normalize(row.Cell(11).GetValue<string>()),
+                            CodiceFiscale = row.Cell(12).GetValue<string>(),
+                            PartitaIVA = row.Cell(13).GetValue<string>(),
+                            RagioneSociale = row.Cell(14).GetValue<string>(),
+                            IdAteco2007 = Normalize(row.Cell(15).GetValue<string>()),
+                            IdFormaGiuridica = Normalize(row.Cell(16).GetValue<string>()),
+                            CodiceREA = Normalize(row.Cell(17).GetValue<string>()),
+                            NumeroSoci = Normalize(row.Cell(18).GetValue<string>()),
+                            NumeroDipendenti = Normalize(row.Cell(19).GetValue<string>()),
+                            NumeroCollaboratori = Normalize(row.Cell(20).GetValue<string>()),
+                            NumeroIscrittiLibroSoci = Normalize(row.Cell(21).GetValue<string>()),
+                            CapitaleSociale = Normalize(row.Cell(22).GetValue<string>()),
+                            DataCapitaleSociale = Normalize(row.Cell(23).GetValue<string>()),
+                            CodiceIscrizioneCCIAA = Normalize(row.Cell(24).GetValue<string>()),
+                            DataIscrizioneCCIAA = Normalize(row.Cell(25).GetValue<string>()),
+                            SitoWeb = Normalize(row.Cell(26).GetValue<string>()),
+                            Iban = Normalize(row.Cell(27).GetValue<string>()),
+                            Email = Normalize(row.Cell(28).GetValue<string>()),
+                            EmailPEC = Normalize(row.Cell(29).GetValue<string>()),
+                            DataCostituzione = Normalize(row.Cell(30).GetValue<string>()),
+                            DataCessazione = Normalize(row.Cell(31).GetValue<string>()),
+                            Telefono = Normalize(row.Cell(32).GetValue<string>()),
+                            Fax = Normalize(row.Cell(33).GetValue<string>()),
+                            IdComuneSedeLegale = ParseInt(row.Cell(34).GetValue<string>() ?? "0"),
+                            IndirizzoSedeLegale = Normalize(row.Cell(35).GetValue<string>()),
+                            CivicoSedeLegale = Normalize(row.Cell(36).GetValue<string>()),
+                            CapSedeLegale = Normalize(row.Cell(37).GetValue<string>()),
+                            FlagPrivacy = Normalize(row.Cell(38).GetValue<string>()),
+                            IdCittadinanza = Normalize(row.Cell(39).GetValue<string>()),
+                            DataInizioValidita = Normalize(row.Cell(40).GetValue<string>()),
+                            DataFineValidita = Normalize(row.Cell(41).GetValue<string>()),
+                            Utente = Normalize(row.Cell(42).GetValue<string>()),
+                            CodiceSezione = row.Cell(43).GetValue<string>(),
+                            DescrizioneSezione = row.Cell(44).GetValue<string>(),
+                            DescrizioneComuneSedeLegale = row.Cell(45).GetValue<string>(),
+                            StatoIscrizione = row.Cell(46).GetValue<string>(),
+                            IdSezioneAlbo = ParseInt(row.Cell(47).GetValue<string>() ?? "0"),
+                            IdAlboIntermediario = ParseInt(row.Cell(48).GetValue<string>() ?? "0"),
+                            IdAlboIntermediarioSezione = ParseInt(row.Cell(49).GetValue<string>() ?? "0"),
+                            IdTipologiaAutorizzazioneIntermediarioSezione = ParseInt(row.Cell(50).GetValue<string>() ?? "0"),
+                            Politica = row.Cell(51).GetValue<string>(),
+                            Recapiti = row.Cell(52).GetValue<string>(),
+                            DesDenominazioneSede = row.Cell(53).GetValue<string>(),
+                            IndirizzoSede = row.Cell(54).GetValue<string>(),
+                            Sede = row.Cell(55).GetValue<string>()
+                        };
+                        list.Add(tipo);
+                    }
                 }
             }
             catch (Exception ex)
@@ -331,6 +376,17 @@ namespace DailyAlbiExtractor
                 Console.WriteLine($"Errore durante la lettura del file Excel: {ex.Message}");
             }
             return list;
+        }
+
+        // Helper methods to safely parse values
+        private int ParseInt(string value)
+        {
+            return int.TryParse(value, out int result) ? result : 0;
+        }
+
+        private bool ParseBool(string value)
+        {
+            return bool.TryParse(value, out bool result) ? result : false;
         }
         public List<ApiItem> LoadFromExcel(string filePath)
         {
@@ -376,6 +432,7 @@ namespace DailyAlbiExtractor
             }
             return items;
         }
+
         public void DownloadExcelFile(string sourceFilePath)
         {
             if (File.Exists(sourceFilePath))
